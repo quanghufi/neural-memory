@@ -19,5 +19,5 @@ ENV NEURAL_MEMORY_BRAIN_DIR=/data/brains
 # Expose the default nmem serve port
 EXPOSE 8000
 
-# Default command: start nmem server
-CMD ["nmem", "serve", "--host", "0.0.0.0", "--port", "8000"]
+# Default command: start nmem server with error logging
+CMD ["sh", "-c", "nmem serve --host 0.0.0.0 --port 8000 2>&1 | tee /data/serve.log; echo \"EXIT CODE: $?\" >> /data/serve.log"]
