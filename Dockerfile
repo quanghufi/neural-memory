@@ -2,6 +2,9 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+# Install git (needed to pip install from GitHub)
+RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
+
 # Install neural-memory v4.20.0 from GitHub with server extras
 RUN pip install --no-cache-dir \
     "neural-memory[server] @ git+https://github.com/nhadaututtheky/neural-memory.git@v4.20.0"
