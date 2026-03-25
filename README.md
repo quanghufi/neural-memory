@@ -52,6 +52,13 @@ Thêm vào file MCP config của editor (VS Code / Gemini / Claude):
 ```
 
 > ⚠️ **Sửa path** cho đúng vị trí clone trên máy.
+> Nếu editor vẫn trỏ vào `nmem-mcp` hoặc `python -m neural_memory.mcp`, nó sẽ tiếp tục dùng local brain ở `~/.neuralmemory/` thay vì Supabase.
+
+Tạo file `.env` từ mẫu trước khi restart editor:
+
+```bash
+cp .env.example .env
+```
 
 ### Bước 4: Restart editor
 
@@ -86,14 +93,16 @@ cp .env.example .env
 python setup_supabrain.py
 ```
 
-### 3. Cập nhật credentials trong `supabrain_mcp.py`
+### 3. Cập nhật credentials trong `.env`
 
-Sửa dòng `DATABASE_URL` trong file `supabrain_mcp.py` với connection string của bạn:
+Sửa `DATABASE_URL` trong file `.env` với connection string của bạn:
 ```
 postgresql://postgres.YOUR_REF:YOUR_PASSWORD@aws-1-ap-southeast-1.pooler.supabase.com:5432/postgres
 ```
 
 > Password có ký tự đặc biệt (`@`, `#`) phải URL-encode (`@` → `%40`)
+
+`supabrain_mcp.py` sẽ tự đọc `.env`, set `DATABASE_URL`, rồi ghi `storage_backend = "postgres"` vào `~/.neuralmemory/config.toml`. Không cần hardcode password trong source nữa.
 
 ### 4. Test
 ```bash

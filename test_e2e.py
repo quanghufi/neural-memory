@@ -1,5 +1,10 @@
 """Test SupaBrain E2E: Brain create -> encode memory -> recall."""
 import asyncio
+import os
+import sys
+from pathlib import Path
+from urllib.parse import unquote, urlparse
+
 import asyncpg
 from neural_memory.storage.postgres import PostgreSQLStorage
 from neural_memory.core.brain import Brain
@@ -7,23 +12,50 @@ from neural_memory.engine.encoder import MemoryEncoder
 from neural_memory.engine.retrieval import ReflexPipeline
 
 
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
+
+def load_database_url() -> str:
+    env_path = Path(__file__).with_name(".env")
+    if env_path.exists():
+        for line in env_path.read_text(encoding="utf-8").splitlines():
+            raw = line.strip()
+            if not raw or raw.startswith("#") or "=" not in raw:
+                continue
+            key, _, value = raw.partition("=")
+            os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+
+    database_url = os.environ.get("DATABASE_URL", "").strip()
+    if not database_url:
+        raise RuntimeError("DATABASE_URL is not set. Copy .env.example to .env and fill it in.")
+    return database_url
+
+
 async def test():
+    parsed = urlparse(load_database_url())
+    host = parsed.hostname or "localhost"
+    port = parsed.port or 5432
+    user = unquote(parsed.username or "postgres")
+    password = unquote(parsed.password or "")
+    database = unquote(parsed.path.lstrip("/") or "postgres")
+
     store = PostgreSQLStorage(
-        host='aws-1-ap-southeast-1.pooler.supabase.com',
-        port=5432,
-        user='postgres.ndnzdahhvolftrclunlc',
-        password='aQ@@020319@@',
-        database='postgres'
+        host=host,
+        port=port,
+        user=user,
+        password=password,
+        database=database
     )
     await store.initialize()
     
     # Check existing brains
     conn = await asyncpg.connect(
-        host='aws-1-ap-southeast-1.pooler.supabase.com',
-        port=5432,
-        user='postgres.ndnzdahhvolftrclunlc',
-        password='aQ@@020319@@',
-        database='postgres',
+        host=host,
+        port=port,
+        user=user,
+        password=password,
+        database=database,
         ssl='require'
     )
     rows = await conn.fetch('SELECT id, name FROM brains')
