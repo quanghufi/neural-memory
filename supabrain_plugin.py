@@ -63,7 +63,11 @@ def register_supabrain():
         class SupabrainPlugin:
             name = "supabrain"
             version = "1.0.0"
-            storage_class = storage_cls
+            _storage_cls = storage_cls
+
+            @staticmethod
+            def get_storage_class():
+                return SupabrainPlugin._storage_cls
 
         register(SupabrainPlugin)
         logger.info("✅ SupaBrain plugin registered — using Supabase PostgreSQL")
