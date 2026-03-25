@@ -29,7 +29,29 @@ cd neural-memory
 pip install -r requirements.txt
 ```
 
-### Bước 3: Config MCP server
+### Bước 3: Tạo `.env`
+
+```bash
+cp .env.example .env
+```
+
+Mở `.env` và điền `YOUR_DATABASE_PASSWORD`.
+
+Mặc định nên dùng **session pooler**:
+
+```env
+DATABASE_URL=postgresql://postgres.YOUR_REF:YOUR_DATABASE_PASSWORD@aws-1-ap-southeast-1.pooler.supabase.com:5432/postgres?sslmode=require
+```
+
+Ví dụ với project ref `ndnzdahhvolftrclunlc`:
+
+```env
+DATABASE_URL=postgresql://postgres.ndnzdahhvolftrclunlc:YOUR_DATABASE_PASSWORD@aws-1-ap-southeast-1.pooler.supabase.com:5432/postgres?sslmode=require
+```
+
+Nếu password có ký tự đặc biệt như `@`, `#`, `%`, phải URL-encode trước khi điền vào `DATABASE_URL`.
+
+### Bước 4: Config MCP server
 
 Thêm vào file MCP config của editor (VS Code / Gemini / Claude):
 
@@ -54,23 +76,54 @@ Thêm vào file MCP config của editor (VS Code / Gemini / Claude):
 > ⚠️ **Sửa path** cho đúng vị trí clone trên máy.
 > Nếu editor vẫn trỏ vào `nmem-mcp` hoặc `python -m neural_memory.mcp`, nó sẽ tiếp tục dùng local brain ở `~/.neuralmemory/` thay vì Supabase.
 
-Tạo file `.env` từ mẫu trước khi restart editor:
-
-```bash
-cp .env.example .env
-```
-
-### Bước 4: Restart editor
+### Bước 5: Restart editor
 
 Reload/restart VS Code hoặc Claude. MCP server sẽ tự kết nối Supabase.
 
-### Bước 5: Verify
+Rất quan trọng: phải restart hẳn MCP process cũ. Nếu editor giữ process `neural-memory` cũ từ trước khi sửa config, nó có thể vẫn bám local SQLite cache.
+
+Khi `supabrain_mcp.py` khởi động, nó sẽ tự cập nhật file:
+
+```text
+~/.neuralmemory/config.toml
+```
+
+Các dòng quan trọng phải có ở **top-level**:
+
+```toml
+current_brain = "default"
+storage_backend = "postgres"
+```
+
+Và phải có section:
+
+```toml
+[postgres]
+host = "aws-1-ap-southeast-1.pooler.supabase.com"
+port = 5432
+database = "postgres"
+user = "postgres.YOUR_REF"
+password = ""
+```
+
+Lưu ý: `storage_backend = "postgres"` phải nằm ở top-level, không được nằm bên trong `[sync]` hay section nào khác. Nếu nằm sai chỗ, `neural-memory` sẽ âm thầm fallback về SQLite local.
+
+### Bước 6: Verify
 
 Trong chat, thử:
 - `nmem_recall("test")` — recall memories
 - `nmem_remember("hello from machine 2")` — lưu memory mới
+- `nmem_stats()` — kiểm tra brain hiện tại có dữ liệu thật không
 
 **Xong!** Cả 2 máy giờ dùng chung 1 brain trên Supabase.
+
+Nếu `nmem_stats()` vẫn ra kiểu:
+- `brain: "default"`
+- `neuron_count: 0`
+- `fiber_count: 0`
+- `db_size_bytes` giống SQLite local
+
+thì gần như chắc chắn editor đang chạy MCP process cũ hoặc đang trỏ nhầm sang `nmem-mcp` mặc định thay vì `supabrain_mcp.py`.
 
 ---
 
@@ -104,10 +157,44 @@ postgresql://postgres.YOUR_REF:YOUR_PASSWORD@aws-1-ap-southeast-1.pooler.supabas
 
 `supabrain_mcp.py` sẽ tự đọc `.env`, set `DATABASE_URL`, rồi ghi `storage_backend = "postgres"` vào `~/.neuralmemory/config.toml`. Không cần hardcode password trong source nữa.
 
-### 4. Test
+### 4. Restart MCP process
+
+Sau khi đổi `.env`, hãy restart editor hoặc remove/add lại MCP server để process cũ bị hạ hoàn toàn.
+
+### 5. Kiểm tra `config.toml` nếu cần
+
+Thông thường không cần sửa tay file này, vì `supabrain_mcp.py` sẽ tự ghi đúng.
+
+Chỉ kiểm tra tay khi:
+- `test_e2e.py` kết nối được Postgres nhưng editor vẫn thấy brain rỗng
+- `nmem_stats()` vẫn giống local SQLite
+- bạn nghi editor đang dùng config cũ
+
+File nằm ở:
+
+```text
+~/.neuralmemory/config.toml
+```
+
+Checklist:
+- có `storage_backend = "postgres"` ở top-level
+- có section `[postgres]`
+- `host`, `port`, `database`, `user` đúng với Supabase project
+
+### 6. Test kết nối thật
+
 ```bash
 python test_e2e.py
 ```
+
+Nếu chạy thành công, bạn sẽ thấy:
+- `Existing brains: ...`
+- `Memory encoded!`
+- `Recall: ...`
+- `All tests done!`
+
+Nếu bị `InvalidPasswordError` thì password trong `.env` chưa đúng.
+Nếu `test_e2e.py` pass nhưng trong editor vẫn ra brain rỗng, nguyên nhân thường là MCP process cũ chưa restart.
 
 ---
 
@@ -151,6 +238,39 @@ python scripts/split_sql.py
 
 # 3. Import lên Supabase (tự động)
 python import_brain.py
+```
+
+Sau khi migrate xong, restart editor/MCP để các tool `nmem_*` nạp lại backend Postgres mới.
+
+---
+
+## 🔎 Troubleshooting
+
+### Triệu chứng: `test_e2e.py` pass nhưng editor vẫn chỉ thấy local brain
+
+Nguyên nhân thường gặp:
+- MCP config đang trỏ nhầm vào `nmem-mcp` hoặc `python -m neural_memory.mcp`
+- Editor chưa restart nên vẫn giữ process cũ
+- `storage_backend = "postgres"` chưa được nạp lại trong `~/.neuralmemory/config.toml`
+
+Cách xử lý:
+1. Kiểm tra MCP config đang chạy đúng `python /path/to/supabrain_mcp.py`
+2. Restart editor hoàn toàn
+3. Mở `~/.neuralmemory/config.toml` kiểm tra `storage_backend = "postgres"` có nằm ở top-level không
+4. Gọi lại `nmem_stats()`
+
+### Triệu chứng: `InvalidPasswordError`
+
+Nguyên nhân:
+- Password database Supabase sai
+- Password có ký tự đặc biệt nhưng chưa URL-encode trong `DATABASE_URL`
+
+### Triệu chứng: direct connection không chạy
+
+Nếu Supabase báo direct connection không IPv4 compatible, hãy dùng session pooler:
+
+```env
+DATABASE_URL=postgresql://postgres.YOUR_REF:YOUR_DATABASE_PASSWORD@aws-1-ap-southeast-1.pooler.supabase.com:5432/postgres?sslmode=require
 ```
 
 ---
