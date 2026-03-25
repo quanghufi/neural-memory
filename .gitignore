@@ -1,4 +1,25 @@
+# Secrets
 .env
-tmp_deploy.py
+
+# Python
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+
+# Export data (migration artifacts - large SQL files)
+export/
+
+# Temp / scratch
+tmp_deploy.py
+tmp_*.py
+*.log
+migration_log.json
+
+# OS
+.DS_Store
+Thumbs.db
