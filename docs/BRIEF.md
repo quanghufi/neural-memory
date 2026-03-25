@@ -1,103 +1,136 @@
-# 💡 BRIEF: Neural Memory Hub trên MikroTik CHR
+# 💡 BRIEF: SupaBrain — Neural Memory trên Supabase
 
-**Ngày tạo:** 2026-03-24
-**Loại sản phẩm:** Self-hosted Server (Docker Container trên MikroTik CHR)
-**Chế độ:** Shared Server Mode (không cần local brain)
+**Ngày tạo:** 2026-03-25
+**Loại sản phẩm:** Web App (MCP Server + REST API + Dashboard)
 
 ---
 
 ## 1. VẤN ĐỀ CẦN GIẢI QUYẾT
 
-Hiện tại mỗi máy (PC, laptop) dùng Neural Memory riêng lẻ — **kiến thức không chia sẻ được** giữa các thiết bị. Cần một Hub trung tâm để tất cả máy dùng chung 1 brain duy nhất, qua domain `nmem.quangda.dpdns.org`.
+Neural Memory hiện dùng **SQLite local** → data bị lock trên 1 máy. Cloud sync qua Cloudflare Worker phải tự host.
+
+**Mong muốn:** Một hệ thống "brain" tương tự neural-memory nhưng **lưu trực tiếp trên Supabase (PostgreSQL)** → free, không cần tự host, multi-device sẵn.
 
 ## 2. GIẢI PHÁP ĐỀ XUẤT
 
-Chạy **Neural Memory Server** (`nmem serve`) ở chế độ **Shared Server Mode** trên container MikroTik CHR. Tất cả máy trỏ thẳng vào server — **không cần local brain**.
+Xây dựng **SupaBrain** — bản neural-memory lite lưu trên Supabase free tier:
+- **Storage:** Supabase PostgreSQL thay SQLite
+- **Auth:** Supabase Auth (miễn phí 50K MAUs)
+- **Realtime:** Supabase Realtime cho multi-device sync
+- **API:** Supabase Edge Functions hoặc self-host FastAPI
+- **Interface:** MCP Server để tích hợp Claude/AI agents
 
-### Tại sao Shared Server Mode?
-- CHR tắt = mất internet = không làm việc được → lo offline là thừa
-- Project sync qua GitHub → không cần giữ context riêng trên local
-- Đơn giản nhất: 1 brain trên server, tất cả máy dùng chung
+## 3. ĐỐI TƯỢNG SỬ DỤNG
 
-## 3. HẠ TẦNG HIỆN CÓ
+- **Primary:** Anh — AI developer cần persistent memory cho AI agents
+- **Secondary:** Developers muốn free cloud brain storage
 
-| Thành phần | Chi tiết |
-|-----------|----------|
-| **Router** | MikroTik CHR, RouterOS v7 |
-| **Domain** | `nmem.quangda.dpdns.org` (DDNS) |
-| **Architecture** | x86_64 (CHR) |
-| **Container support** | OCI-compliant (RouterOS v7.4+) |
+## 4. NGHIÊN CỨU
 
-## 4. KIẾN TRÚC
+### Neural Memory — Kiến trúc tham khảo
 
-```
-┌─────────────────────────────────────────┐
-│           MikroTik CHR (RouterOS v7)    │
-│                                         │
-│  ┌───────────────────────────────────┐  │
-│  │  Container: neural-memory-server  │  │
-│  │  (Python 3.11-slim)              │  │
-│  │                                   │  │
-│  │  nmem serve --host 0.0.0.0       │  │
-│  │        ↕ port 8000               │  │
-│  │  /data/brain.db (persistent)     │  │
-│  └──────────┬────────────────────────┘  │
-│             │ VETH interface            │
-│  ┌──────────┴────────────────────────┐  │
-│  │  Bridge / DST-NAT                │  │
-│  │  nmem.quangda.dpdns.org:8000     │  │
-│  └───────────────────────────────────┘  │
-└─────────────────────────────────────────┘
-         ↕
-   ┌─────────┐  ┌─────────┐  ┌─────────┐
-   │  PC #1  │  │  PC #2  │  │ Laptop  │
-   │ shared  │  │ shared  │  │ shared  │
-   │ enable  │  │ enable  │  │ enable  │
-   └─────────┘  └─────────┘  └─────────┘
+| Thành phần | Mô tả | Áp dụng cho SupaBrain? |
+|-----------|-------|----------------------|
+| **Neuron** | Đơn vị thông tin (entity, concept, time…) | ✅ Giữ nguyên |
+| **Synapse** | Kết nối giữa neurons (24 loại: CAUSED_BY, LEADS_TO…) | ✅ Giữ nguyên |
+| **Fiber** | Pathway chứa memory content | ✅ Giữ nguyên |
+| **Brain** | Container + config | ✅ Giữ nguyên |
+| **TypedMemory** | 14 loại (fact, decision, todo…) | ✅ Giữ nguyên |
+| **Spreading Activation** | Retrieval qua graph traversal | ⚠️ Simplified — dùng SQL recursive CTE |
+| **MemoryEncoder** | Text → neural structures | ✅ Giữ, chạy client-side |
+| **Consolidation** | Prune, merge, decay… | 🟡 Phase 2 |
+| **Cognitive Layer** | Hypothesis, evidence, predictions | 🟡 Phase 2 |
 
-Client setup (mỗi máy):
-  nmem shared enable http://nmem.quangda.dpdns.org:8000
-```
+### Supabase Free Tier Limits
+
+| Resource | Limit | Đủ dùng? |
+|----------|-------|----------|
+| DB Storage | 500 MB | ✅ Đủ cho ~100K+ memories |
+| API Requests | Unlimited | ✅ Không lo |
+| MAUs | 50,000 | ✅ Quá dư |
+| Bandwidth | 5 GB/mo | ✅ Text-based, rất nhẹ |
+| Projects | 2 active | ⚠️ Chỉ 2 project free |
+| Inactivity | Pause sau 7 ngày | ⚠️ Cần ping định kỳ |
+
+### Điểm khác biệt so với Neural Memory gốc
+
+| Neural Memory | SupaBrain |
+|--------------|-----------|
+| SQLite local | PostgreSQL cloud (Supabase) |
+| Self-host sync server | Supabase Realtime built-in |
+| Offline-first | Cloud-first, offline fallback |
+| Cloudflare Worker sync | Không cần — direct DB |
+| Python package | Python MCP + REST API |
 
 ## 5. TÍNH NĂNG
 
-### 🚀 MVP (Bắt buộc có):
-- [ ] Docker image chứa `neural-memory[server]`
-- [ ] Container chạy `nmem serve --host 0.0.0.0 -p 8000`
-- [ ] VETH interface + Bridge trên MikroTik CHR
-- [ ] DST-NAT rule → container port 8000
-- [ ] Persistent storage cho brain data (bind-mount)
-- [ ] Client: `nmem shared enable` trỏ đến server
+### 🚀 MVP (Bắt buộc có)
 
-### 🎁 Phase 2 (Làm sau):
-- [ ] HTTPS + API key (nếu truy cập ngoài LAN)
-- [ ] Auto-restart container khi CHR reboot
-- [ ] Backup tự động brain data
+- [ ] **Database Schema** — Tables: brains, neurons, synapses, fibers, typed_memories
+- [ ] **Core CRUD** — Tạo/đọc/sửa/xóa neurons, synapses, fibers
+- [ ] **nmem_remember** — Lưu memory (auto-detect type)
+- [ ] **nmem_recall** — Truy xuất memory bằng semantic search (FTS + graph traversal)
+- [ ] **nmem_context** — Load recent context
+- [ ] **Supabase Auth** — Đăng ký/đăng nhập, Row Level Security
+- [ ] **MCP Server** — Tích hợp Claude Code / Gemini
+- [ ] **Brain management** — Tạo/chọn/list brains
 
-## 6. ƯỚC TÍNH SƠ BỘ
+### 🎁 Phase 2 (Làm sau)
 
-| Mục | Đánh giá |
-|-----|----------|
-| **Độ phức tạp** | Đơn giản - Trung bình |
-| **Thời gian** | ~1 ngày setup |
-| **Yêu cầu CHR** | RAM ≥ 256MB, Disk ≥ 500MB |
+- [ ] Spreading Activation nâng cao (SQL recursive CTE)
+- [ ] Consolidation engine (prune, merge, decay)
+- [ ] Cognitive layer (hypothesis, evidence, predictions)
+- [ ] Web Dashboard (React)
+- [ ] Brain versioning (snapshot, rollback)
+- [ ] Training pipeline (ingest PDF, DOCX…)
+- [ ] Edge Functions cho server-side processing
 
-### ⚠️ Rủi ro:
-- **Python image size**: ~150-200MB, cần đủ disk trên CHR
-- **Không có Docker Compose**: Cấu hình container qua RouterOS CLI
-- **Reboot persistence**: Phải bind-mount đúng thư mục data
+### 💭 Backlog (Cân nhắc)
 
-## 7. CÁC FILE CẦN TẠO
+- [ ] VS Code extension
+- [ ] Telegram backup
+- [ ] Import adapters (ChromaDB, Mem0…)
+- [ ] Real-time collaborative brains
 
-```
-nmem-hub-chr/
-├── docs/BRIEF.md              ← (file này)
-├── Dockerfile                  ← Build image nmem-hub
-├── entrypoint.sh               ← Script khởi động
-├── mikrotik/setup-container.rsc ← RouterOS script
-└── README.md                   ← Hướng dẫn triển khai
-```
+## 6. ĐÁNH GIÁ KỸ THUẬT
+
+### 🟢 DỄ LÀM
+- Database schema trên Supabase (PostgreSQL tables)
+- CRUD operations qua Supabase client
+- Auth + RLS (Row Level Security)
+- Basic MCP server wrapper
+
+### 🟡 TRUNG BÌNH
+- Semantic recall (Full-text search PostgreSQL + graph traversal)
+- Memory encoder (text → neuron/synapse/fiber structures)
+- Query parser + temporal extraction
+
+### 🔴 KHÓ
+- Spreading activation trên PostgreSQL (recursive CTE performance)
+- Consolidation engine (complex async operations)
+- Real-time sync giữa local cache + Supabase
+
+### ⚠️ Rủi ro
+
+| Rủi ro | Giải pháp |
+|--------|----------|
+| Supabase pause sau 7 ngày | Cron job ping định kỳ (free with GitHub Actions) |
+| 500MB storage limit | Consolidation tự prune old data |
+| Graph traversal chậm trên PostgreSQL | Cache hot paths, limit depth |
+| Supabase outage | Local SQLite fallback (hybrid) |
+
+## 7. TECH STACK DỰ KIẾN
+
+| Layer | Technology |
+|-------|-----------|
+| Database | Supabase (PostgreSQL 15+) |
+| Auth | Supabase Auth |
+| Backend | Python + FastAPI (hoặc Edge Functions) |
+| MCP Server | Python MCP SDK |
+| Client | supabase-py (Python client) |
+| Search | PostgreSQL FTS (tsvector) |
+| Dashboard | React + Vite (Phase 2) |
 
 ## 8. BƯỚC TIẾP THEO
 
-→ Chạy `/plan` để thiết kế chi tiết từng file và cấu hình MikroTik
+→ Chạy `/plan` để thiết kế chi tiết database schema + API
