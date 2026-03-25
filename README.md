@@ -26,7 +26,7 @@ cd neural-memory
 
 ### Bước 2: Cài dependencies
 ```bash
-pip install neural-memory asyncpg
+pip install -r requirements.txt
 ```
 
 ### Bước 3: Config MCP server
@@ -159,6 +159,38 @@ GitHub Actions cron ping mỗi 3 ngày. Setup:
 1. Push repo lên GitHub
 2. **Settings → Secrets → Actions** → thêm `DATABASE_URL`
 3. Tự chạy (hoặc manual: Actions → Keep Supabase Alive → Run)
+
+---
+
+## 📦 Dependencies & Upgrade
+
+Version đang dùng được lock trong `requirements.txt`:
+
+```
+neural-memory @ git+https://github.com/nhadaututtheky/neural-memory.git@v4.20.0
+asyncpg
+```
+
+### Cài lần đầu
+```bash
+pip install -r requirements.txt
+```
+
+### Khi muốn update neural-memory lên version mới
+
+1. Kiểm tra [release notes](https://github.com/nhadaututtheky/neural-memory/releases) xem có breaking changes không
+2. Đổi version trong `requirements.txt`:
+   ```
+   neural-memory @ git+https://...@v4.21.0   ← đổi số version
+   ```
+3. Cài và test:
+   ```bash
+   pip install -r requirements.txt --upgrade
+   python test_e2e.py
+   ```
+4. Nếu MCP không start → kiểm tra import path trong `supabrain_plugin.py` có còn đúng không
+
+> **Lưu ý:** Data trên Supabase không bị ảnh hưởng khi upgrade. Chỉ có MCP server có thể cần fix nếu internal API thay đổi.
 
 ---
 

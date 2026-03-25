@@ -1,0 +1,3 @@
+# Pin neural-memory directly from upstream GitHub so installs always use the original source.
+neural-memory @ git+https://github.com/nhadaututtheky/neural-memory.git@v4.20.0
+asyncpg
