@@ -102,17 +102,30 @@ python test_e2e.py
 
 ---
 
-## 📁 File quan trọng
+## 📁 Cấu trúc dự án
 
-| File | Mục đích |
-|------|----------|
-| `supabrain_mcp.py` | **Entry point** — MCP server wrapper |
-| `supabrain_plugin.py` | Đăng ký PostgreSQLStorage (bypass Pro) |
-| `setup_supabrain.py` | Deploy schema lên Supabase |
-| `scripts/deploy_schema.sql` | Schema SQL (11 tables) |
-| `test_e2e.py` | Test encode + recall |
-| `export_brain.py` | Export SQLite → SQL files |
-| `import_brain.py` | Import SQL files → Supabase |
+```
+nmem-hub-chr/
+├── supabrain_mcp.py        # Entry point — MCP server wrapper
+├── supabrain_plugin.py     # Đăng ký PostgreSQLStorage (bypass Pro)
+├── setup_supabrain.py      # Deploy schema lên Supabase
+├── export_brain.py         # Export SQLite → SQL files
+├── import_brain.py         # Import SQL files → Supabase
+├── test_e2e.py             # Test encode + recall
+├── patch_sync.py           # Patch sync endpoint (nếu cần)
+│
+├── scripts/
+│   ├── deploy_schema.sql   # Schema SQL (11 tables)
+│   ├── rls_policies.sql    # Row Level Security policies
+│   ├── migrate_brain.py    # Migration helper
+│   ├── split_sql.py        # Tách file SQL lớn
+│   └── save_context.py     # Save context helper
+│
+└── docs/
+    ├── BRIEF.md            # Project brief
+    ├── factory_ref.py      # Factory reference
+    └── pg_schema_ref.py    # PostgreSQL schema reference
+```
 
 ---
 
@@ -125,7 +138,7 @@ Nếu đã có brain trên SQLite local và muốn chuyển lên cloud:
 python export_brain.py
 
 # 2. Tách file nhỏ
-python split_sql.py
+python scripts/split_sql.py
 
 # 3. Import lên Supabase (tự động)
 python import_brain.py
