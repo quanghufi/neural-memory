@@ -18,7 +18,7 @@ import logging
 import os
 from collections.abc import Callable
 from typing import Any
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +35,9 @@ def _get_supabase_storage_class():
 
     parsed = urlparse(database_url)
     ssl_mode = parse_qs(parsed.query).get("sslmode", [""])[0] or None
+    db_user = unquote(parsed.username or "postgres")
+    db_password = unquote(parsed.password or "")
+    db_name = unquote(parsed.path.lstrip("/") or "postgres")
 
     class SupabrainStorage(PostgreSQLStorage):
         """PostgreSQLStorage pre-configured for Supabase."""
@@ -43,9 +46,9 @@ def _get_supabase_storage_class():
             super().__init__(
                 host=parsed.hostname or "localhost",
                 port=parsed.port or 5432,
-                user=parsed.username or "postgres",
-                password=parsed.password or "",
-                database=parsed.path.lstrip("/") or "postgres",
+                user=db_user,
+                password=db_password,
+                database=db_name,
                 embedding_dim=kwargs.get("embedding_dim", 384),
             )
             self._ssl = "require" if ssl_mode == "require" else None
