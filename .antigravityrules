@@ -13,7 +13,7 @@ RÀNG BUỘC BỔ SUNG: {CONSTRAINTS}
 2. KHÔNG dừng giữa chừng để báo lỗi hay xin hướng dẫn.
 3. TỰ SUY LUẬN nếu thiếu thông tin; ghi lại Assumptions ở cuối.
 4. KHÔNG tự chứng nhận bằng lời nói. Mọi khẳng định phải có bằng chứng cụ thể.
-5. CHỈ đánh dấu "Fixed/Pass/Production-ready" khi có đủ Code + Test/Gate + Runtime proofs.
+5. CHỈ đánh dấu "Fixed/Pass/Production-ready" nếu chưa có code proof + test/gate proof + runtime/behavior proof tương ứng.
 6. SECURE-BY-DEFAULT cho mọi cấu hình Auth/Secrets/TLS.
    - Placeholder/Default credentials KHÔNG ĐƯỢC PHÉP hoạt động mặc định.
    - Chỉ cho phép tương thích ngược qua explicit opt-in flag/config.
@@ -27,76 +27,95 @@ RÀNG BUỘC BỔ SUNG: {CONSTRAINTS}
 2) DONE CRITERIA CỨNG (HARD DONE CRITERIA)
 ====================================================================
 Chỉ kết thúc khi TẤT CẢ mục sau đều đúng:
-A. Nhiệm vụ đã hoàn thành đầy đủ trong phạm vi repo.
-B. KHÔNG còn Blocker/Critical unresolved (của task hoặc tự phát hiện).
-C. Mọi logic/fix đều có test/repro tự động phù hợp.
-D. Mọi Quality Gates thực sự chạy và Pass.
-E. Runtime Smoke thực sự chạy ổn định.
-F. Frontend/UI (nếu có) phải verify executable (Browser/Headless/DOM); không chỉ đọc source.
-G. Auth/Secrets: Sạch 100% real secrets trong tracked files; placeholder fail-closed.
-H. Báo cáo cuối KHÔNG mâu thuẫn với artifacts, tests, commands đã chạy.
-I. Phải Pass khâu "Tự kiểm định độc lập" (Judge Pass) ở cuối.
+A. Mục tiêu của TASK đã được triển khai hoặc xử lý đầy đủ trong phạm vi repo.
+B. KHÔNG còn Blocker/Critical unresolved liên quan trực tiếp tới TASK hoặc do chính bạn phát hiện trong quá trình thực hiện.
+C. Mọi thay đổi logic/behavior/bugfix đều có test hoặc repro tự động phù hợp.
+D. Mọi quality gates phù hợp với repo đã thực sự chạy và pass.
+E. Runtime smoke đã thực sự chạy ở mức phù hợp với task.
+F. Nếu repo có frontend/static UI liên quan, đã có executable verification ở mức browser/headless/DOM executable path; không được chỉ đọc source rồi kết luận.
+G. Nếu có auth/secret/config bảo mật:
+   - không còn real secret trong tracked runtime files
+   - không còn placeholder/default credential hoạt động trong safe/default mode
+   - không còn backup/log/temp residue chứa secret
+H. Báo cáo cuối không mâu thuẫn với artifacts, tests, commands đã chạy.
+I. Có pass “tự kiểm định độc lập” (Judge pass) ở cuối.
 
 ====================================================================
 3) SINGLE SOURCE OF TRUTH ARTIFACTS
 ====================================================================
-Thư mục `task_artifacts/` là nguồn sự thật duy nhất. BẮT BUỘC tạo:
-- FINDINGS.json
-- RUN_RESULTS.json
-- FINAL_ASSERTIONS.json
-- PROOF_MATRIX.json / PROOF_MATRIX.md
-- FINAL_REPORT.md
-- COMMANDS_RUN.md
-- JUDGE_VERDICT.json
-- JUDGE_REPORT.md
-(Bổ sung SECRETS_SCAN, BROWSER_EVIDENCE, ARCHITECTURE.md khi cần thiết).
+Tạo thư mục task_artifacts/ (hoặc tên tương đương nếu repo đã có convention riêng) và dùng nó làm nguồn sự thật duy nhất cho báo cáo cuối.
+BẮT BUỘC tạo tối thiểu:
+- task_artifacts/FINDINGS.json
+- task_artifacts/RUN_RESULTS.json
+- task_artifacts/FINAL_ASSERTIONS.json
+- task_artifacts/PROOF_MATRIX.json
+- task_artifacts/PROOF_MATRIX.md
+- task_artifacts/FINAL_REPORT.md
+- task_artifacts/COMMANDS_RUN.md
+- task_artifacts/JUDGE_VERDICT.json
+- task_artifacts/JUDGE_REPORT.md
+Tạo thêm khi phù hợp:
+- task_artifacts/SECRETS_SCAN_BEFORE.json
+- task_artifacts/SECRETS_SCAN_AFTER.json
+- task_artifacts/BROWSER_EVIDENCE.json
+- task_artifacts/RUNTIME_EVIDENCE.json
+- task_artifacts/ARCHITECTURE.md
+- task_artifacts/AUTH_REDTEAM.md
+- task_artifacts/CONSISTENCY_CHECK.json
+- task_artifacts/render_final_report.py
+- task_artifacts/validate_consistency.py
+Quy tắc:
+- Mọi con số tổng hợp ở báo cáo cuối phải suy ra từ artifacts này.
+- Không được tự viết tay số lượng findings/tests/proofs nếu chưa đối chiếu artifact.
 
 ====================================================================
-4) MÔ HÌNH BẰNG CHỨNG BẮT BUỘC (5-LAYER PROOF)
+4) MÔ HÌNH BẰNG CHỨNG BẮT BUỘC (MANDATORY PROOF MODEL)
 ====================================================================
-Finding chỉ là FIXED khi đủ 5 lớp:
-1. Code Proof: File, Module/Symbol đã đổi, tóm tắt diff.
-2. Test Proof: Test file, tên test và kết quả PASS.
-3. Gate Proof: Command cụ thể và kết quả PASS.
-4. Behavior Proof: Endpoint/Behavior đã xác minh; Expected vs Actual.
-5. Re-scan Proof: Scan sau sửa xác nhận signature issue không còn tồn tại.
+Một finding chỉ được gán Fixed khi có đủ 5 lớp proof:
+1. Code Proof: file đã sửa, symbol/module/function đã đổi, tóm tắt diff.
+2. Test Proof: test file hoặc repro script, tên test/repro, kết quả pass.
+3. Gate Proof: command cụ thể, kết quả pass.
+4. Runtime / Behavior Proof: endpoint/page/flow/behavior đã xác minh, expected vs actual.
+5. Re-scan Proof: scan sau sửa xác nhận signature của issue không còn tồn tại hoặc đã được mitigate an toàn.
+Status hợp lệ: Fixed, Fixed-via-flag, Fixed-via-mitigation, Not Fixed, Known.
+Quy tắc: Blocker/Critical không được là Not Fixed hoặc Known.
 
 ====================================================================
-5) QUY TRÌNH THỰC THI BẮT BUỘC (7 PHASES)
+5) QUY TRÌNH THỰC THI BẮT BUỘC (MANDATORY EXECUTION PROCESS)
 ====================================================================
-PHASE 1 - RECONNAISSANCE: Trinh sát cây thư mục, stack, auth, API, background jobs.
-PHASE 2 - BASELINE: Chạy thử lint, build, test, audit hiện tại; scan secrets trước sửa.
-PHASE 3 - FINDINGS + PLAN: Lập danh sách vấn đề, phân loại Severity, xác định Fix & Test Strategy.
-PHASE 4 - IMPLEMENTATION LOOP: Code -> Test -> Verify (Lặp lại cho tới khi Resolved).
-PHASE 5 - FULL QUALITY GATES: Chạy đầy đủ bộ gate (linter, mypy, pytest, audit, v.v.).
-PHASE 6 - RUNTIME / BROWSER / RED-TEAM: Chạy app thật, verify smoke, red-team auth (thử case sai).
+PHASE 1 - RECONNAISSANCE: In cây thư mục, xác định stack, backend/frontend, auth mechanisms.
+PHASE 2 - BASELINE: Chạy thử lint, build, test hiện tại; scan secrets trước khi sửa.
+PHASE 3 - FINDINGS + PLAN: Lập danh sách vấn đề kèm Severity, xác định root cause, Fix & Test Strategy.
+PHASE 4 - IMPLEMENTATION LOOP: Fix code -> Repro -> Test -> Verify.
+PHASE 5 - FULL QUALITY GATES: Chạy ruff/mypy/pytest (Python), lint/build (Node), v.v.
+PHASE 6 - RUNTIME / BROWSER / RED-TEAM: Chạy app thật, verify smoke, Red-team auth verification.
 PHASE 7 - JUDGE PASS: Tự kiểm định chéo Artifacts. Judge FAIL = Quay lại Phase 4.
 
 ====================================================================
 6) QUY TẮC BẢO MẬT FAIL-CLOSED
 ====================================================================
-1. Real secrets phải được sanitize thành template.
+1. Real secrets phải được loại khỏi tracked files.
 2. Placeholder KHÔNG được authenticate thành công trong default mode.
-3. Missing credentials phải khiến app fail-fast hoặc fail-closed (401/403).
+3. Missing credentials phải khiến app fail-fast hoặc routes fail-closed (401/403).
 4. Insecure TLS phải OFF mặc định.
-5. Phải quét sạch backup/temp/log residue; .gitignore không đủ để xóa hazard cũ.
+5. Quét sạch cả backup/temp/log residue; .gitignore không đủ để xóa hazard cũ.
 
 ====================================================================
-7) FORMAT ĐẦU RA CUỐI CÙNG (12 SECTIONS)
+7) FORMAT ĐẦU RA CUỐI CÙNG (FINAL OUTPUT FORMAT)
 ====================================================================
 Báo cáo cuối PHẢI có:
-1. EXECUTIVE SUMMARY (10-20 bullets khớp artifacts).
+1. EXECUTIVE SUMMARY (10-20 bullet cụ thể khớp artifacts).
 2. FINAL READINESS ASSESSMENT (Ready / Conditionally / Not ready).
-3. KEY ASSERTIONS (Yes/No + Proof ref).
-4. ARCHITECTURE / CONTEXT SUMMARY (Diagram if large).
+3. KEY ASSERTIONS (Yes/No + proof ref).
+4. ARCHITECTURE / CONTEXT SUMMARY.
 5. FINDINGS TABLE (ID, Severity, Root Cause, Fix, Proof Ref...).
 6. CHANGES IMPLEMENTED (File, Module, Why needed).
 7. TESTS / COMMANDS ACTUALLY RUN.
 8. RUNTIME / BROWSER / RED-TEAM EVIDENCE.
 9. ASSUMPTIONS.
 10. RESIDUAL RISKS / NEXT STEPS.
-11. JUDGE VERDICT (Trạng thái và mâu thuẫn đã tự phát hiện).
-12. ARTIFACTS GENERATED (Danh sách file thực tế).
+11. JUDGE VERDICT (Trạng thái và các mâu thuẫn đã tự giải quyết).
+12. ARTIFACTS GENERATED (Danh sách file thực tế trong task_artifacts/).
 ====================================================================
 😎 ĐIỀU KIỆN TỰ KHÓA: KHÔNG KẾT THÚC NẾU THIẾU BẤT KỲ ĐIỀU NÀO TRÊN ĐÂY.
 ====================================================================
