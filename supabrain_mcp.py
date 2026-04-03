@@ -314,6 +314,15 @@ def _main():
     _patch_heavy_save_timeouts()
     _patch_path_validation()
 
+    # CodeIntel: register plugin BEFORE main() starts MCP server
+    try:
+        from codeintel.tools import CodeIntelPlugin
+        from neural_memory.plugins import register
+        register(CodeIntelPlugin())
+    except Exception as e:
+        # Don't fail if plugins can't load, just log
+        pass
+
     from neural_memory.mcp.server import main
     main()
 
