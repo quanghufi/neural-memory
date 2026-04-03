@@ -1,10 +1,9 @@
 """
-SupaBrain MCP Server — Neural Memory on Supabase.
-Wrapper that registers PostgreSQLStorage plugin, then starts nmem-mcp.
+Neural Memory MCP Server — Self-hosted PostgreSQL on VPS.
+Configures built-in postgres backend, then starts nmem-mcp.
 """
 import os
 import re
-import sys
 import logging
 import traceback
 from pathlib import Path
@@ -31,13 +30,6 @@ def _load_local_env() -> None:
         key = key.strip()
         value = value.strip().strip('"').strip("'")
         os.environ.setdefault(key, value)
-
-
-def _replace_or_append(content: str, pattern: str, replacement: str) -> str:
-    if re.search(pattern, content, flags=re.MULTILINE):
-        return re.sub(pattern, replacement, content, count=1, flags=re.MULTILINE)
-    suffix = "" if not content or content.endswith("\n") else "\n"
-    return f"{content}{suffix}{replacement}\n"
 
 
 def _upsert_top_level_scalar(content: str, key: str, value_literal: str) -> str:
@@ -113,24 +105,225 @@ def _configure_postgres_backend() -> None:
     os.environ["NEURALMEMORY_DIR"] = str(data_dir)
 
 
-_load_local_env()
-os.environ.setdefault("NM_MODE", "postgres")
-_configure_postgres_backend()
+def _read_positive_timeout(env_name: str, default: float) -> float:
+    raw_value = os.environ.get(env_name, "").strip()
+    if not raw_value:
+        return default
+    try:
+        parsed_value = float(raw_value)
+    except ValueError:
+        return default
+    return parsed_value if parsed_value > 0 else default
 
-# Add project dir for supabrain_plugin
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-# Register plugin (silenced)
+def _patch_heavy_save_timeouts() -> None:
+    """
+    Increase the default 30s budget for save-heavy MCP operations.
+
+    neural_memory currently enforces a 30s MCP tool timeout and also uses 30s
+    as the default asyncpg per-query timeout in PostgresBaseMixin. That is too
+    small for large remember/train batches on remote Postgres.
+
+    We patch the wrapper, not site-packages, so upgrades remain safe.
+    """
+    import importlib
+
+    save_tool_timeout = _read_positive_timeout("NMEM_SAVE_TOOL_TIMEOUT_SECONDS", 300.0)
+    save_query_timeout = _read_positive_timeout(
+        "NMEM_SAVE_QUERY_TIMEOUT_SECONDS",
+        save_tool_timeout,
+    )
+    heavy_save_tools = frozenset(
+        {
+            "nmem_auto",
+            "nmem_db_train",
+            "nmem_remember",
+            "nmem_remember_batch",
+            "nmem_train",
+            "nmem_watch",
+        }
+    )
+
+    def _should_extend_tool_timeout(tool_name: str) -> bool:
+        if tool_name in heavy_save_tools:
+            return True
+        return tool_name.startswith("nmem_train")
+
+    def _lift_default_timeout(timeout: float | None) -> float:
+        if timeout is None:
+            return save_query_timeout
+        try:
+            timeout_value = float(timeout)
+        except (TypeError, ValueError):
+            return save_query_timeout
+        if timeout_value == 30.0:
+            return save_query_timeout
+        return timeout_value
+
+    try:
+        server_module = importlib.import_module("neural_memory.mcp.server")
+        original_handle_message = server_module.handle_message
+
+        if not getattr(original_handle_message, "_supabrain_heavy_save_timeout_patch", False):
+
+            async def _handle_message(server, message, _orig=original_handle_message):
+                if message.get("method") != "tools/call":
+                    return await _orig(server, message)
+
+                params = message.get("params", {})
+                tool_name = str(params.get("name", ""))
+                if not _should_extend_tool_timeout(tool_name):
+                    return await _orig(server, message)
+
+                previous_timeout = getattr(server_module, "_TOOL_CALL_TIMEOUT", 30.0)
+                server_module._TOOL_CALL_TIMEOUT = max(float(previous_timeout), save_tool_timeout)
+                try:
+                    return await _orig(server, message)
+                finally:
+                    server_module._TOOL_CALL_TIMEOUT = previous_timeout
+
+            _handle_message._supabrain_heavy_save_timeout_patch = True
+            server_module.handle_message = _handle_message
+    except Exception:
+        pass
+
+    try:
+        postgres_base_module = importlib.import_module(
+            "neural_memory.storage.postgres.postgres_base"
+        )
+        postgres_base_cls = postgres_base_module.PostgresBaseMixin
+
+        def _wrap_default_timeout(method_name: str) -> None:
+            original_method = getattr(postgres_base_cls, method_name, None)
+            if original_method is None or getattr(
+                original_method,
+                "_supabrain_heavy_save_timeout_patch",
+                False,
+            ):
+                return
+
+            async def _wrapped(self, *args, timeout: float = 30.0, _orig=original_method, **kwargs):
+                effective_timeout = _lift_default_timeout(timeout)
+                return await _orig(self, *args, timeout=effective_timeout, **kwargs)
+
+            _wrapped._supabrain_heavy_save_timeout_patch = True
+            setattr(postgres_base_cls, method_name, _wrapped)
+
+        for method_name in ("_query", "_query_ro", "_query_one", "_executemany"):
+            _wrap_default_timeout(method_name)
+    except Exception:
+        pass
+
+
+def _patch_path_validation() -> None:
+    """
+    Monkey-patch nmem handlers to allow scanning codebases outside CWD.
+
+    By default nmem_index/nmem_train reject paths not under the MCP server's
+    working directory.  This patch temporarily chdir() to the target path so
+    the original is_relative_to(cwd) check passes.
+
+    Lives in wrapper (not site-packages) → survives pip upgrades.
+    """
+    import importlib
+
+    _BLOCKED = tuple(
+        Path(p).resolve()
+        for p in [
+            os.environ.get("SYSTEMROOT", r"C:\Windows"),
+            r"C:\Program Files",
+            r"C:\Program Files (x86)",
+        ]
+        if Path(p).exists()
+    )
+
+    def _safe(p: Path) -> bool:
+        r = p.resolve()
+        return not any(r.is_relative_to(b) for b in _BLOCKED)
+
+    # ── index_handler._index_scan ──
+    try:
+        idx = importlib.import_module("neural_memory.mcp.index_handler")
+        _orig_idx = idx.IndexHandler._index_scan
+
+        async def _idx(self, args, storage):
+            p = Path(args.get("path", ".")).resolve()
+            if not p.is_dir():
+                return {"error": "Not a directory"}
+            if not _safe(p):
+                return {"error": "Path is in a blocked system directory"}
+            saved = Path.cwd()
+            try:
+                os.chdir(p)
+                return await _orig_idx(self, args, storage)
+            finally:
+                os.chdir(saved)
+
+        idx.IndexHandler._index_scan = _idx
+    except Exception:
+        pass
+
+    # ── train_handler._train_docs ──
+    try:
+        trn = importlib.import_module("neural_memory.mcp.train_handler")
+        _orig_trn = trn.TrainHandler._train_docs
+
+        async def _trn(self, args):
+            p = Path(args.get("path", ".")).resolve()
+            if not p.exists():
+                return {"error": "Path not found"}
+            if not _safe(p):
+                return {"error": "Path is in a blocked system directory"}
+            saved = Path.cwd()
+            try:
+                os.chdir(p if p.is_dir() else p.parent)
+                return await _orig_trn(self, args)
+            finally:
+                os.chdir(saved)
+
+        trn.TrainHandler._train_docs = _trn
+    except Exception:
+        pass
+
+    # ── watch_handler (if present) ──
+    try:
+        w = importlib.import_module("neural_memory.mcp.watch_handler")
+        if hasattr(w, "WatchHandler") and hasattr(w.WatchHandler, "_watch_scan"):
+            _orig_w = w.WatchHandler._watch_scan
+
+            async def _ws(self, args, storage):
+                p = Path(args.get("directory", ".")).resolve()
+                if not _safe(p):
+                    return {"error": "Path is in a blocked system directory"}
+                saved = Path.cwd()
+                try:
+                    os.chdir(p if p.is_dir() else p.parent)
+                    return await _orig_w(self, args, storage)
+                finally:
+                    os.chdir(saved)
+
+            w.WatchHandler._watch_scan = _ws
+    except Exception:
+        pass
+
+
+def _main():
+    _load_local_env()
+    os.environ.setdefault("NM_MODE", "postgres")
+    _configure_postgres_backend()
+    _patch_heavy_save_timeouts()
+    _patch_path_validation()
+
+    from neural_memory.mcp.server import main
+    main()
+
+
 try:
-    import supabrain_plugin
+    _main()
 except Exception:
     log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "supabrain_mcp_error.log")
     with open(log_path, "a", encoding="utf-8") as fh:
-        fh.write("Failed to import supabrain_plugin\n")
+        fh.write("Startup failed\n")
         fh.write(traceback.format_exc())
         fh.write("\n")
     raise SystemExit(1)
-
-# Start MCP server
-from neural_memory.mcp.server import main
-main()
