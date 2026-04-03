@@ -135,12 +135,68 @@ def _patch_heavy_save_timeouts() -> None:
     )
     heavy_save_tools = frozenset(
         {
-            "nmem_auto",
-            "nmem_db_train",
+            # ── Core memory operations ──
             "nmem_remember",
             "nmem_remember_batch",
+            "nmem_auto",
+            "nmem_recall",
+            "nmem_context",
+            "nmem_show",
+            "nmem_edit",
+            "nmem_forget",
+            "nmem_pin",
+            "nmem_todo",
+            "nmem_refine",
+            "nmem_report_outcome",
+            # ── Project / session persistence ──
+            "nmem_eternal",
+            "nmem_session",
+            "nmem_recap",
+            # ── Training & indexing ──
             "nmem_train",
+            "nmem_db_train",
+            "nmem_index",
             "nmem_watch",
+            # ── Code intelligence ──
+            "nmem_codeintel_index",
+            "nmem_codeintel_search",
+            "nmem_codeintel_callers",
+            "nmem_codeintel_callees",
+            "nmem_codeintel_impact",
+            # ── Consolidation & lifecycle ──
+            "nmem_consolidate",
+            "nmem_lifecycle",
+            "nmem_review",
+            "nmem_surface",
+            "nmem_version",
+            # ── Knowledge graph & reasoning ──
+            "nmem_hypothesize",
+            "nmem_evidence",
+            "nmem_predict",
+            "nmem_verify",
+            "nmem_schema",
+            "nmem_explain",
+            "nmem_narrative",
+            "nmem_cognitive",
+            "nmem_gaps",
+            # ── Diagnostics & maintenance ──
+            "nmem_health",
+            "nmem_stats",
+            "nmem_evolution",
+            "nmem_alerts",
+            "nmem_conflicts",
+            "nmem_drift",
+            "nmem_habits",
+            "nmem_suggest",
+            "nmem_tool_stats",
+            "nmem_budget",
+            "nmem_visualize",
+            # ── Sync & provenance ──
+            "nmem_sync",
+            "nmem_sync_config",
+            "nmem_sync_status",
+            "nmem_source",
+            "nmem_provenance",
         }
     )
 
