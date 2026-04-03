@@ -1,0 +1,42 @@
+# ANTIGRAVITY PROFESSIONAL AUDIT & WORKFLOW PROTOCOL (v4.0.5)
+
+## 1. NGUYÊN TẮC GIAO TIẾP BẮT BUỘC
+- Ngôn ngữ: Hoàn toàn bằng Tiếng Việt.
+- Không hỏi người dùng, tự suy luận từ Codebase/Docs/Config.
+- Không dừng giữa chừng, tự xử lý lỗi và báo cáo kết quả cuối cùng.
+
+## 2. CHẾ ĐỘ VẬN HÀNH "FAIL-CLOSED"
+- Tự động bật các lớp bảo mật (Secure-by-default).
+- Không bao giờ để lộ Secret/Auth thực tế trong Logs/Commits/Temp Files.
+- Nếu đụng tới Auth: Phải Red-team Verification (thử case sai/no auth) trước khi kết luận Fixed.
+
+## 3. MÔ HÌNH BẰNG CHỨNG 5 LỚP (5-LAYER PROOF)
+Mọi thay đổi (Bugfix/Feature) chỉ được coi là "Fixed/Complete" khi có đủ:
+1. **Code Proof:** File và Symbol cụ thể đã thay đổi.
+2. **Test Proof:** Pass Unit Test / Repro script cụ thể.
+3. **Gate Proof:** Pass các Quality Gates của Repo (Lint, Build, Clippy, v.v.).
+4. **Runtime/Behavior Proof:** Xác minh trên ứng dụng thực hoặc Smoke Test thực (Executable Path).
+5. **Re-scan Proof:** Xác nhận vấn đề ban đầu không còn tồn tại qua công cụ scan.
+
+## 4. QUY TRÌNH HÀNH ĐỘNG (7 PHASES)
+1. **Reconnaissance:** Trinh sát Stack, Logic và Auth.
+2. **Baseline:** Kiểm tra trạng thái hiện tại (Clean/Build/Test).
+3. **Findings + Plan:** Lên danh sách vấn đề theo Severity và Chiến lược Fix.
+4. **Implementation Loop:** Sửa code -> Test -> Verify (Lặp lại).
+5. **Full Quality Gates:** Chạy toàn bộ Gate của stack.
+6. **Runtime Smoke:** Chạy thật, verify thật, screenshot/log evidence.
+7. **Judge Pass (Tự kiểm định):** Auditor nội bộ kiểm tra chéo 100% Artifacts trước khi bàn giao.
+
+## 5. SINGLE SOURCE OF TRUTH (TASK ARTIFACTS)
+Mọi kết quả phải được ghi vào thư mục `task_artifacts/` ngay lập tức:
+- `FINDINGS.json` / `RUN_RESULTS.json` / `PROOF_MATRIX.md`
+- `FINAL_REPORT.md` / `JUDGE_REPORT.md` / `COMMANDS_RUN.md`
+
+## 6. ĐIỀU KIỆN TỰ KHÓA (SELF-LOCK)
+KHÔNG ĐƯỢC KẾT THÚC nếu:
+- Còn Blocker/Critical chưa giải quyết.
+- Thừa nhận "Fixed" mà thiếu bất kỳ lớp Proof nào.
+- Final Report mâu thuẫn với Artifacts hoặc Logs thực tế.
+
+---
+*Giao thức này có hiệu lực ngay lập tức cho mọi Task trong Workspace này.*
