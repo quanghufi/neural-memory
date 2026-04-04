@@ -9,8 +9,22 @@ import traceback
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
-# Silence all logging to stderr (MCP uses stdio, stderr output can cause EOF)
-logging.disable(logging.CRITICAL)
+# Silence stderr logging (MCP uses stdio, stderr output can cause EOF)
+# But redirect to a debug log file so we can diagnose tool failures
+_debug_log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "supabrain_debug.log")
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    filename=_debug_log_path,
+    filemode="a",
+)
+# Prevent any output to stderr (MCP needs clean stdio)
+logging.getLogger().handlers = [h for h in logging.getLogger().handlers if not isinstance(h, logging.StreamHandler) or h.stream != __import__('sys').stderr]
+_file_handler = logging.FileHandler(_debug_log_path, mode="a", encoding="utf-8")
+_file_handler.setLevel(logging.DEBUG)
+_file_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+logging.getLogger().addHandler(_file_handler)
+logging.getLogger().setLevel(logging.DEBUG)
 
 
 def _toml_escape(value: str) -> str:
@@ -271,6 +285,45 @@ def _patch_heavy_save_timeouts() -> None:
         pass
 
 
+def _patch_reflex_time_factor_overflow() -> None:
+    """
+    Clamp reflex time-factor exponent so ancient fibers cannot overflow math.exp().
+
+    neural_memory's ReflexActivation uses a sigmoid over fiber age in hours.
+    Brains migrated from older datasets can contain fibers last_conducted years
+    in the past, which pushes the exponent far above Python's safe exp() range.
+    """
+    import importlib
+    import math
+
+    try:
+        reflex_module = importlib.import_module("neural_memory.engine.reflex_activation")
+        reflex_cls = reflex_module.ReflexActivation
+        original_method = getattr(reflex_cls, "_compute_time_factor", None)
+
+        if original_method is None or getattr(
+            original_method,
+            "_supabrain_time_factor_clamp_patch",
+            False,
+        ):
+            return
+
+        def _safe_compute_time_factor(self, fiber, reference_time):
+            if fiber.last_conducted is None:
+                # Preserve upstream fallback for never-conducted fibers.
+                return 0.3 + 0.4 * fiber.salience
+
+            age_hours = (reference_time - fiber.last_conducted).total_seconds() / 3600
+            exponent = (age_hours - 72) / 36
+            exponent = max(-100.0, min(100.0, exponent))
+            return max(0.1, 1.0 / (1.0 + math.exp(exponent)))
+
+        _safe_compute_time_factor._supabrain_time_factor_clamp_patch = True
+        reflex_cls._compute_time_factor = _safe_compute_time_factor
+    except Exception:
+        pass
+
+
 def _patch_path_validation() -> None:
     """
     Monkey-patch nmem handlers to allow scanning codebases outside CWD.
@@ -368,6 +421,7 @@ def _main():
     os.environ.setdefault("NM_MODE", "postgres")
     _configure_postgres_backend()
     _patch_heavy_save_timeouts()
+    _patch_reflex_time_factor_overflow()
     _patch_path_validation()
 
     # CodeIntel: register plugin BEFORE main() starts MCP server
