@@ -1,0 +1,41 @@
+[
+    {
+        "id": "NC-001",
+        "severity": "Critical",
+        "area": "MCP / Engine",
+        "description": "Lỗi tràn mảng/số mũ (Exponential Overflow) khi tính toán reflex time cho các fiber cổ (ancient fibers).",
+        "impact": "Khiến MCP server bị crash hoặc treo khi thực hiện recall các memory cũ.",
+        "evidence": "test_supabrain_mcp_reflex_time_patch.py (passed)",
+        "location": "supabrain_mcp.py",
+        "root_cause": "Hàm _compute_time_factor sử dụng math.exp((age_hours - 72) / 36) mà không giới hạn age_hours, dẫn đến overflow cho các memory có tuổi đời > 30000 giờ.",
+        "fix": "Triển khai patch _patch_reflex_time_factor_overflow() để giới hạn giá trị exponent hoặc age_hours.",
+        "status": "Fixed",
+        "proof_ref": "PROOF_MATRIX.md#NC-001"
+    },
+    {
+        "id": "NC-002",
+        "severity": "Major",
+        "area": "Data Maintenance",
+        "description": "Dữ liệu last_conducted không hợp lệ (trước năm 2026 hoặc trước ngày tạo).",
+        "impact": "Gây nhiễu logic recall và trigger lỗi overflow.",
+        "evidence": "scripts/repair_last_conducted.py",
+        "location": "data/",
+        "root_cause": "Lỗi đồng bộ hoặc corruption dữ liệu trong quá khứ.",
+        "fix": "Sử dụng script repair_last_conducted.py để chuẩn hóa lại timestamp.",
+        "status": "Fixed",
+        "proof_ref": "PROOF_MATRIX.md#NC-002"
+    },
+    {
+        "id": "NC-003",
+        "severity": "Minor",
+        "area": "Environment",
+        "description": "requirements.txt lỗi thời, thiếu tree-sitter.",
+        "impact": "Không thể triển khai tính năng Code Intelligence.",
+        "evidence": "requirements.txt modified",
+        "location": "requirements.txt",
+        "root_cause": "Chưa update dependencies cho giai đoạn mới.",
+        "fix": "Cập nhật requirements.txt với các thư viện tree-sitter và repo mới nhất.",
+        "status": "Fixed",
+        "proof_ref": "PROOF_MATRIX.md#NC-003"
+    }
+]

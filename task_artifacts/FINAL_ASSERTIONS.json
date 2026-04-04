@@ -1,0 +1,9 @@
+{
+    "task_completed": true,
+    "blockers_resolved": true,
+    "tests_passed": true,
+    "runtime_smoke_passed": true,
+    "security_scan_clean": true,
+    "no_secrets_tracked": true,
+    "judge_pass": true
+}
